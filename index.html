@@ -1,0 +1,938 @@
+﻿<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unity School / УжСкул — Шкільний Портал</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .bg-unity-header {
+            background: linear-gradient(135deg, #3b82f6 0%, #4f46e5 100%);
+        }
+        .btn-tab-active {
+            background-color: #4338ca !important;
+            color: #ffffff !important;
+            font-weight: 600;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c7d2fe;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-gray-800">
+
+    <!-- APP CONTAINER -->
+    <div id="app" class="flex-1 flex flex-col"></div>
+
+    <script>
+        // --- ПОЧАТКОВІ ДАНІ ТА СТРУКТУРА ЗБЕРЕЖЕННЯ ---
+        const DEFAULT_DATA = {
+            currentUser: null,
+            users: [
+                {
+                    id: 'usr_superadmin',
+                    login: 'artem_admin_777',
+                    password: 'UzhSchool_Secure_2026_Root',
+                    fullName: 'Біличко Артем Володимирович',
+                    role: 'superadmin',
+                    birthDate: '2000-01-01'
+                }
+            ],
+            classes: ['7-А', '7-Б', '8-А', '9-А', '10-A', '11-А'],
+            subjects: ['Математика', 'Українська мова', 'Фізика', 'Історія України', 'Англійська мова', 'Інформатика'],
+            lessons: [],
+            grades: []
+        };
+
+        // Ініціалізація Сховища (localStorage)
+        function loadDB() {
+            const data = localStorage.getItem('uzhschool_db_v2');
+            if (!data) {
+                localStorage.setItem('uzhschool_db_v2', JSON.stringify(DEFAULT_DATA));
+                return JSON.parse(JSON.stringify(DEFAULT_DATA));
+            }
+            return JSON.parse(data);
+        }
+
+        function saveDB(db) {
+            localStorage.setItem('uzhschool_db_v2', JSON.stringify(db));
+        }
+
+        let db = loadDB();
+        let currentTab = 'teachers';
+
+        // Розрахунок віку з дати народження
+        function calculateAge(birthDateStr) {
+            if (!birthDateStr) return '-';
+            const birthDate = new Date(birthDateStr);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            return isNaN(age) ? '-' : `${age} років`;
+        }
+
+        // Перетворення URL у викладених темах на активні посилання
+        function formatLinks(text) {
+            if (!text) return '';
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            return text.replace(urlRegex, function(url) {
+                return `<a href="${url}" target="_blank" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline font-medium break-all"><i class="fa-solid fa-link text-xs"></i> Перейти за посиланням</a>`;
+            });
+        }
+
+        // --- ГОЛОВНИЙ РЕНДЕР ---
+        function render() {
+            const app = document.getElementById('app');
+            if (!db.currentUser) {
+                app.innerHTML = renderLogin();
+            } else {
+                app.innerHTML = `
+                    ${renderHeader()}
+                    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
+                        ${renderMainContent()}
+                    </main>
+                `;
+            }
+        }
+
+        // --- ЕКРАН АВТОРИЗАЦІЇ ---
+        function renderLogin() {
+            return `
+                <div class="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                    <div class="bg-slate-800 text-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-slate-700">
+                        <div class="text-center mb-8">
+                            <div class="w-16 h-16 bg-indigo-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-4">
+                                <i class="fa-solid fa-graduation-cap text-3xl text-white"></i>
+                            </div>
+                            <h1 class="text-3xl font-bold tracking-tight">УжСкул</h1>
+                            <p class="text-slate-400 text-sm mt-1">Електронний журнал та щоденник</p>
+                        </div>
+
+                        <form onsubmit="handleLogin(event)" class="space-y-5">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Логін</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                                        <i class="fa-solid fa-user"></i>
+                                    </span>
+                                    <input type="text" id="login_user" required placeholder="Введіть ваш логін" 
+                                        class="w-full pl-10 pr-4 py-3 bg-slate-900/80 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm text-white placeholder-slate-500">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Пароль</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                                        <i class="fa-solid fa-lock"></i>
+                                    </span>
+                                    <input type="password" id="login_pass" required placeholder="••••••••" 
+                                        class="w-full pl-10 pr-4 py-3 bg-slate-900/80 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm text-white placeholder-slate-500">
+                                </div>
+                            </div>
+
+                            <button type="submit" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2">
+                                <span>Увійти до системи</span>
+                                <i class="fa-solid fa-arrow-right text-sm"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ВЕРХНЯ ШАПКА З ВКАДКАМИ (ДИЗАЙН UNITY SCHOOL) ---
+        function renderHeader() {
+            const u = db.currentUser;
+            let roleTitle = 'Користувач';
+            if (u.role === 'superadmin') roleTitle = 'Головний Администратор';
+            else if (u.role === 'admin') roleTitle = 'Администратор Школи';
+            else if (u.role === 'teacher') roleTitle = 'Вчитель';
+            else if (u.role === 'student') roleTitle = 'Учень';
+
+            return `
+                <header class="bg-unity-header text-white shadow-md">
+                    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+                                <i class="fa-solid fa-graduation-cap text-xl"></i>
+                            </div>
+                            <div>
+                                <h1 class="text-xl font-bold leading-none">Unity School</h1>
+                                <span class="text-xs text-blue-100 font-medium">${roleTitle}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-4">
+                            <div class="text-right hidden sm:block">
+                                <div class="text-sm font-semibold">${u.fullName}</div>
+                                <div class="text-xs text-blue-200">Панель керування</div>
+                            </div>
+                            <button onclick="handleLogout()" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition border border-white/20 flex items-center gap-2">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                                <span>Вийти</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    ${(u.role === 'superadmin' || u.role === 'admin') ? `
+                    <div class="max-w-7xl mx-auto px-4 pt-2 pb-3 overflow-x-auto">
+                        <div class="flex items-center gap-2 min-w-max">
+                            <button onclick="setTab('teachers')" class="px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${currentTab === 'teachers' ? 'btn-tab-active' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                <i class="fa-solid fa-user-tie"></i> Вчителі
+                            </button>
+                            <button onclick="setTab('students')" class="px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${currentTab === 'students' ? 'btn-tab-active' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                <i class="fa-solid fa-user-graduate"></i> Учні
+                            </button>
+                            ${u.role === 'superadmin' ? `
+                            <button onclick="setTab('admins')" class="px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${currentTab === 'admins' ? 'btn-tab-active' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                <i class="fa-solid fa-user-shield"></i> Адміністратори
+                            </button>
+                            ` : ''}
+                            <button onclick="setTab('classes')" class="px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${currentTab === 'classes' ? 'btn-tab-active' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                <i class="fa-solid fa-school"></i> Класи
+                            </button>
+                            <button onclick="setTab('subjects')" class="px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${currentTab === 'subjects' ? 'btn-tab-active' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                <i class="fa-solid fa-book"></i> Предмети
+                            </button>
+                            <button onclick="setTab('journal')" class="px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${currentTab === 'journal' ? 'btn-tab-active' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                <i class="fa-solid fa-clipboard-list"></i> Журнал
+                            </button>
+                        </div>
+                    </div>
+                    ` : ''}
+                </header>
+            `;
+        }
+
+        // --- ГОЛОВНИЙ ВМІСТ ВІДПОВІДНО ДО РОЛІ ТА ВКЛАДКИ ---
+        function renderMainContent() {
+            const u = db.currentUser;
+
+            if (u.role === 'teacher') return renderTeacherJournal();
+            if (u.role === 'student') return renderStudentDiary();
+
+            // Адмінські панелі
+            switch (currentTab) {
+                case 'teachers': return renderTeachersTab();
+                case 'students': return renderStudentsTab();
+                case 'admins': return renderAdminsTab();
+                case 'classes': return renderClassesTab();
+                case 'subjects': return renderSubjectsTab();
+                case 'journal': return renderTeacherJournal();
+                default: return renderTeachersTab();
+            }
+        }
+
+        // --- ВКЛАДКА ВЧИТЕЛІВ (ТОЧНА КОПІЯ З ФОТО) ---
+        function renderTeachersTab() {
+            const isSuper = db.currentUser.role === 'superadmin';
+            const teachers = db.users.filter(x => x.role === 'teacher');
+
+            return `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- ЛІВА КОЛОНКА: ФОРМА ДОДАВАННЯ -->
+                    <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                        <div class="flex items-center gap-2 text-indigo-600 font-bold text-lg mb-4">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <h2>Додати вчителя</h2>
+                        </div>
+
+                        ${!isSuper ? `
+                            <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+                                <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                                Тільки Головний Администратор має право додавати нових вчителів.
+                            </div>
+                        ` : `
+                            <form onsubmit="handleAddTeacher(event)" class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">ПІБ Вчителя</label>
+                                    <input type="text" id="t_name" required placeholder="Шевченко Ольга Іванівна" class="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Дата народження</label>
+                                    <input type="date" id="t_dob" required class="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Предмети (оберіть декілька)</label>
+                                    <select id="t_subjects" multiple required class="w-full px-3 py-2 border rounded-xl text-sm h-28 custom-scrollbar focus:ring-2 focus:ring-indigo-500">
+                                        ${db.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                                    </select>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">Утримуйте Ctrl / Cmd для вибору кількох</p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Класи (оберіть декілька)</label>
+                                    <select id="t_classes" multiple required class="w-full px-3 py-2 border rounded-xl text-sm h-24 custom-scrollbar focus:ring-2 focus:ring-indigo-500">
+                                        ${db.classes.map(c => `<option value="${c}">${c}</option>`).join('')}
+                                    </select>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Логін</label>
+                                        <input type="text" id="t_login" required placeholder="teacher1" class="w-full px-3 py-2 border rounded-xl text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Пароль</label>
+                                        <input type="text" id="t_pass" required placeholder="pass123" class="w-full px-3 py-2 border rounded-xl text-sm">
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition shadow-md shadow-indigo-200">
+                                    + Додати вчителя
+                                </button>
+                            </form>
+                        `}
+                    </div>
+
+                    <!-- ПРАВА КОЛОНКА: ТАБЛИЦЯ СПИСКУ ВЧИТЕЛІВ -->
+                    <div class="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2 text-gray-800 font-bold text-lg">
+                                <i class="fa-solid fa-list-ul text-indigo-600"></i>
+                                <h2>Список вчителів</h2>
+                            </div>
+                            <span class="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-1 rounded-full border border-indigo-100">
+                                Всього: ${teachers.length}
+                            </span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="border-b bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold">
+                                        <th class="py-3 px-3">ПІБ</th>
+                                        <th class="py-3 px-3">Вік</th>
+                                        <th class="py-3 px-3">Предмети</th>
+                                        <th class="py-3 px-3">Класи</th>
+                                        <th class="py-3 px-3">Логін / Пароль</th>
+                                        <th class="py-3 px-3 text-right">Дії</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    ${teachers.length === 0 ? `
+                                        <tr><td colspan="6" class="text-center py-8 text-gray-400">Учителів ще не додано</td></tr>
+                                    ` : teachers.map(t => `
+                                        <tr class="hover:bg-gray-50 transition">
+                                            <td class="py-3 px-3 font-semibold text-gray-900">${t.fullName}</td>
+                                            <td class="py-3 px-3 text-gray-600">${calculateAge(t.birthDate)}</td>
+                                            <td class="py-3 px-3 text-gray-600">${(t.subjects || []).join(', ') || '-'}</td>
+                                            <td class="py-3 px-3 text-gray-600 font-medium">${(t.classes || []).join(', ') || '-'}</td>
+                                            <td class="py-3 px-3 font-mono text-xs text-indigo-600">${t.login} /${t.password}</td>
+                                            <td class="py-3 px-3 text-right">
+                                                ${isSuper ? `
+                                                    <button onclick="handleDeleteUser('${t.id}')" class="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition" title="Видалити">
+                                                        <i class="fa-solid fa-trash-can"></i>
+                                                    </button>
+                                                ` : '-'}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ВКЛАДКА УЧНІВ ---
+        function renderStudentsTab() {
+            const students = db.users.filter(x => x.role === 'student');
+
+            return `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                        <div class="flex items-center gap-2 text-indigo-600 font-bold text-lg mb-4">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <h2>Додати учня</h2>
+                        </div>
+
+                        <form onsubmit="handleAddStudent(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">ПІБ Учня</label>
+                                <input type="text" id="s_name" required placeholder="Петренко Іван Олександрович" class="w-full px-3 py-2 border rounded-xl text-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Клас</label>
+                                <select id="s_class" required class="w-full px-3 py-2 border rounded-xl text-sm">
+                                    ${db.classes.map(c => `<option value="${c}">${c}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Логін</label>
+                                    <input type="text" id="s_login" required placeholder="student1" class="w-full px-3 py-2 border rounded-xl text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Пароль</label>
+                                    <input type="text" id="s_pass" required placeholder="pass123" class="w-full px-3 py-2 border rounded-xl text-sm">
+                                </div>
+                            </div>
+
+                            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition">
+                                + Додати учня
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2 text-gray-800 font-bold text-lg">
+                                <i class="fa-solid fa-users text-indigo-600"></i>
+                                <h2>Список учнів</h2>
+                            </div>
+                            <span class="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-1 rounded-full border border-indigo-100">
+                                Всього: ${students.length}
+                            </span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="border-b bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold">
+                                        <th class="py-3 px-3">ПІБ</th>
+                                        <th class="py-3 px-3">Клас</th>
+                                        <th class="py-3 px-3">Логін / Пароль</th>
+                                        <th class="py-3 px-3 text-right">Дії</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    ${students.length === 0 ? `
+                                        <tr><td colspan="4" class="text-center py-8 text-gray-400">Учнів ще не додано</td></tr>
+                                    ` : students.map(s => `
+                                        <tr class="hover:bg-gray-50 transition">
+                                            <td class="py-3 px-3 font-semibold text-gray-900">${s.fullName}</td>
+                                            <td class="py-3 px-3 font-medium text-indigo-600">${s.studentClass || '-'}</td>
+                                            <td class="py-3 px-3 font-mono text-xs text-gray-600">${s.login} /${s.password}</td>
+                                            <td class="py-3 px-3 text-right">
+                                                <button onclick="handleDeleteUser('${s.id}')" class="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ВКЛАДКА АДМІНІСТРАТОРІВ (ТІЛЬКИ ДЛЯ СУПЕР-АДМІНА) ---
+        function renderAdminsTab() {
+            const admins = db.users.filter(x => x.role === 'admin');
+
+            return `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                        <div class="flex items-center gap-2 text-indigo-600 font-bold text-lg mb-4">
+                            <i class="fa-solid fa-user-shield"></i>
+                            <h2>Додати адміна</h2>
+                        </div>
+
+                        <form onsubmit="handleAddAdmin(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">ПІБ Адміністратора</label>
+                                <input type="text" id="a_name" required placeholder="Ковальчук Петро Іванович" class="w-full px-3 py-2 border rounded-xl text-sm">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Логін</label>
+                                    <input type="text" id="a_login" required placeholder="admin2" class="w-full px-3 py-2 border rounded-xl text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Пароль</label>
+                                    <input type="text" id="a_pass" required placeholder="pass123" class="w-full px-3 py-2 border rounded-xl text-sm">
+                                </div>
+                            </div>
+
+                            <p class="text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                                <i class="fa-solid fa-circle-info mr-1"></i> Звичайні адміни можуть додавати лише учнів.
+                            </p>
+
+                            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition">
+                                + Додати адміністратора
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2 text-gray-800 font-bold text-lg">
+                                <i class="fa-solid fa-user-shield text-indigo-600"></i>
+                                <h2>Список адміністраторів</h2>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="border-b bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold">
+                                        <th class="py-3 px-3">ПІБ</th>
+                                        <th class="py-3 px-3">Тип</th>
+                                        <th class="py-3 px-3">Логін / Пароль</th>
+                                        <th class="py-3 px-3 text-right">Дії</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    ${admins.length === 0 ? `
+                                        <tr><td colspan="4" class="text-center py-8 text-gray-400">Додаткових адмінів ще немає</td></tr>
+                                    ` : admins.map(a => `
+                                        <tr class="hover:bg-gray-50 transition">
+                                            <td class="py-3 px-3 font-semibold text-gray-900">${a.fullName}</td>
+                                            <td class="py-3 px-3"><span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md text-xs font-semibold">Адміністратор</span></td>
+                                            <td class="py-3 px-3 font-mono text-xs text-gray-600">${a.login} /${a.password}</td>
+                                            <td class="py-3 px-3 text-right">
+                                                <button onclick="handleDeleteUser('${a.id}')" class="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ВКЛАДКА КЛАСІВ ---
+        function renderClassesTab() {
+            return `
+                <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                    <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-school text-indigo-600"></i> Управління Класами
+                    </h2>
+
+                    <form onsubmit="handleAddClass(event)" class="flex gap-3 mb-6">
+                        <input type="text" id="new_class_name" required placeholder="Наприклад: 8-Б" class="flex-1 px-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500">
+                        <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition">
+                            Додати клас
+                        </button>
+                    </form>
+
+                    <div class="flex flex-wrap gap-2">
+                        ${db.classes.map(c => `
+                            <div class="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-800 font-semibold text-sm flex items-center gap-3">
+                                <span>Клас ${c}</span>
+                                <button onclick="handleDeleteClass('${c}')" class="text-indigo-400 hover:text-red-600 transition">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ВКЛАДКА ПРЕДМЕТІВ ---
+        function renderSubjectsTab() {
+            return `
+                <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                    <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-book text-indigo-600"></i> Навчальні Предмети
+                    </h2>
+
+                    <form onsubmit="handleAddSubject(event)" class="flex gap-3 mb-6">
+                        <input type="text" id="new_subject_name" required placeholder="Наприклад: Biологія" class="flex-1 px-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500">
+                        <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition">
+                            Додати предмет
+                        </button>
+                    </form>
+
+                    <div class="flex flex-wrap gap-2">
+                        ${db.subjects.map(s => `
+                            <div class="px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 font-semibold text-sm flex items-center gap-3">
+                                <span>${s}</span>
+                                <button onclick="handleDeleteSubject('${s}')" class="text-emerald-400 hover:text-red-600 transition">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- КАБІНЕТ ВЧИТЕЛЯ ТА ЖУРНАЛ ОЦІНОК ---
+        function renderTeacherJournal() {
+            const selClass = document.getElementById('j_class_filter')?.value || db.classes[0] || '';
+            const selSubj = document.getElementById('j_subj_filter')?.value || db.subjects[0] || '';
+            const studentsInClass = db.users.filter(u => u.role === 'student' && u.studentClass === selClass);
+
+            return `
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6">
+                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b pb-4">
+                        <div class="flex items-center gap-2 text-indigo-600 font-bold text-xl">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <h2>Електронний Журнал Оцінювання</h2>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-0.5">Клас</label>
+                                <select id="j_class_filter" onchange="render()" class="px-3 py-1.5 border rounded-xl text-sm font-semibold text-gray-700 bg-gray-50">
+                                    ${db.classes.map(c => `<option value="${c}" ${c === selClass ? 'selected' : ''}>Клас ${c}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-0.5">Предмет</label>
+                                <select id="j_subj_filter" onchange="render()" class="px-3 py-1.5 border rounded-xl text-sm font-semibold text-gray-700 bg-gray-50">
+                                    ${db.subjects.map(s => `<option value="${s}" ${s === selSubj ? 'selected' : ''}>${s}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ТЕМА УРОКУ ТА ДОМАШНЄ ЗАВДАННЯ -->
+                    <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4">
+                        <h3 class="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-pen-to-square"></i> Проведення уроку та домашнє завдання
+                        </h3>
+                        <form onsubmit="handleSaveLesson(event, '${selClass}', '${selSubj}')" class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div class="md:col-span-5">
+                                <input type="text" id="l_topic" required placeholder="Тема уроку (вставляйте посилання сюди)" class="w-full px-3 py-2 border rounded-xl text-sm bg-white">
+                            </div>
+                            <div class="md:col-span-5">
+                                <input type="text" id="l_hw" placeholder="Домашнє завдання" class="w-full px-3 py-2 border rounded-xl text-sm bg-white">
+                            </div>
+                            <div class="md:col-span-2">
+                                <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition">
+                                    Зберегти
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- ТАБЛИЦЯ ОЦІНЮВАННЯ УЧНІВ -->
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-700 mb-3">Список учнів класу ${selClass}</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="border-b bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold">
+                                        <th class="py-3 px-4">ПІБ Учня</th>
+                                        <th class="py-3 px-4">Виставити оцінку (1-12) / Н</th>
+                                        <th class="py-3 px-4 text-right">Історія оцінок</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    ${studentsInClass.length === 0 ? `
+                                        <tr><td colspan="3" class="text-center py-8 text-gray-400">У цьому класі ще немає учнів</td></tr>
+                                    ` : studentsInClass.map(s => {
+                                        const studentGrades = db.grades.filter(g => g.studentId === s.id && g.subject === selSubj);
+                                        return `
+                                            <tr class="hover:bg-gray-50 transition">
+                                                <td class="py-3 px-4 font-semibold text-gray-800">${s.fullName}</td>
+                                                <td class="py-3 px-4">
+                                                    <div class="flex items-center gap-2">
+                                                        <input type="text" id="grade_val_${s.id}" placeholder="1-12 або Н" class="w-28 px-3 py-1 border rounded-lg text-sm text-center">
+                                                        <button onclick="handleAddGrade('${s.id}', '${selSubj}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition">
+                                                            Оцінити
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                                <td class="py-3 px-4 text-right">
+                                                    <div class="flex flex-wrap justify-end gap-1">
+                                                        ${studentGrades.map(g => `
+                                                            <span class="px-2 py-0.5 ${g.val === 'Н' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-800'} rounded text-xs font-bold">
+                                                                ${g.val}
+                                                            </span>
+                                                        `).join('')}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ЕКРАН ЕЛЕКТРОННОГО ЩОДЕННИКА УЧНЯ ---
+        function renderStudentDiary() {
+            const u = db.currentUser;
+            const myGrades = db.grades.filter(g => g.studentId === u.id);
+            const myLessons = db.lessons.filter(l => l.studentClass === u.studentClass);
+
+            return `
+                <div class="space-y-6">
+                    <!-- КАРТКА УСПІШНОСТІ -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 text-2xl font-bold">
+                                ${u.studentClass || '7-А'}
+                            </div>
+                            <div>
+                                <h2 class="text-xl font-bold text-gray-900">${u.fullName}</h2>
+                                <p class="text-sm text-gray-500">Учень класу ${u.studentClass}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-6">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-indigo-600">
+                                    ${myGrades.length ? (myGrades.filter(g => g.val !== 'Н').reduce((a, b) => a + Number(b.val), 0) / (myGrades.filter(g => g.val !== 'Н').length || 1)).toFixed(1) : '0.0'}
+                                </div>
+                                <div class="text-xs text-gray-400 font-semibold uppercase">Середній бал</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-red-500">
+                                    ${myGrades.filter(g => g.val === 'Н').length}
+                                </div>
+                                <div class="text-xs text-gray-400 font-semibold uppercase">Пропусків (Н)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- УРОКИ ТА ДОМАШНІ ЗАВДАННЯ -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-book-open text-indigo-600"></i> Останні Уроки та Завдання
+                        </h3>
+
+                        <div class="space-y-4">
+                            ${myLessons.length === 0 ? `
+                                <p class="text-center py-8 text-gray-400">Уроків ще не додано</p>
+                            ` : myLessons.slice().reverse().map(l => `
+                                <div class="p-4 border rounded-xl hover:border-indigo-200 transition bg-gray-50/50">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="font-bold text-indigo-600 text-sm">${l.subject}</span>
+                                        <span class="text-xs text-gray-400">${l.date}</span>
+                                    </div>
+                                    <div class="text-sm font-semibold text-gray-800 mb-1">
+                                        Тема: ${formatLinks(l.topic)}
+                                    </div>
+                                    ${l.homework ? `
+                                        <div class="text-xs bg-amber-50 text-amber-900 border border-amber-200 p-2.5 rounded-lg mt-2">
+                                            <strong>Д/З:</strong> ${l.homework}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ОБРОБНИКИ ПОДІЙ (HANDLERS) ---
+        function handleLogin(e) {
+            e.preventDefault();
+            const log = document.getElementById('login_user').value.trim();
+            const pas = document.getElementById('login_pass').value.trim();
+
+            const found = db.users.find(u => u.login === log && u.password === pas);
+            if (found) {
+                db.currentUser = found;
+                saveDB(db);
+                render();
+            } else {
+                alert('Невірний логін або пароль!');
+            }
+        }
+
+        function handleLogout() {
+            db.currentUser = null;
+            saveDB(db);
+            render();
+        }
+
+        function setTab(tab) {
+            currentTab = tab;
+            render();
+        }
+
+        function handleAddTeacher(e) {
+            e.preventDefault();
+            const name = document.getElementById('t_name').value.trim();
+            const dob = document.getElementById('t_dob').value;
+            const subjs = Array.from(document.getElementById('t_subjects').selectedOptions).map(o => o.value);
+            const clss = Array.from(document.getElementById('t_classes').selectedOptions).map(o => o.value);
+            const log = document.getElementById('t_login').value.trim();
+            const pas = document.getElementById('t_pass').value.trim();
+
+            if (db.users.some(u => u.login === log)) {
+                alert('Користувач із таким логіном вже існує!');
+                return;
+            }
+
+            db.users.push({
+                id: 'usr_' + Date.now(),
+                fullName: name,
+                birthDate: dob,
+                subjects: subjs,
+                classes: clss,
+                login: log,
+                password: pas,
+                role: 'teacher'
+            });
+
+            saveDB(db);
+            render();
+        }
+
+        function handleAddStudent(e) {
+            e.preventDefault();
+            const name = document.getElementById('s_name').value.trim();
+            const cls = document.getElementById('s_class').value;
+            const log = document.getElementById('s_login').value.trim();
+            const pas = document.getElementById('s_pass').value.trim();
+
+            if (db.users.some(u => u.login === log)) {
+                alert('Користувач із таким логіном вже існує!');
+                return;
+            }
+
+            db.users.push({
+                id: 'usr_' + Date.now(),
+                fullName: name,
+                studentClass: cls,
+                login: log,
+                password: pas,
+                role: 'student'
+            });
+
+            saveDB(db);
+            render();
+        }
+
+        function handleAddAdmin(e) {
+            e.preventDefault();
+            const name = document.getElementById('a_name').value.trim();
+            const log = document.getElementById('a_login').value.trim();
+            const pas = document.getElementById('a_pass').value.trim();
+
+            if (db.users.some(u => u.login === log)) {
+                alert('Користувач із таким логіном вже існує!');
+                return;
+            }
+
+            db.users.push({
+                id: 'usr_' + Date.now(),
+                fullName: name,
+                login: log,
+                password: pas,
+                role: 'admin'
+            });
+
+            saveDB(db);
+            render();
+        }
+
+        function handleDeleteUser(id) {
+            if (confirm('Ви дійсно бажаєте видалити цього користувача?')) {
+                db.users = db.users.filter(u => u.id !== id);
+                saveDB(db);
+                render();
+            }
+        }
+
+        function handleAddClass(e) {
+            e.preventDefault();
+            const name = document.getElementById('new_class_name').value.trim();
+            if (name && !db.classes.includes(name)) {
+                db.classes.push(name);
+                saveDB(db);
+                render();
+            }
+        }
+
+        function handleDeleteClass(clsName) {
+            db.classes = db.classes.filter(c => c !== clsName);
+            saveDB(db);
+            render();
+        }
+
+        function handleAddSubject(e) {
+            e.preventDefault();
+            const name = document.getElementById('new_subject_name').value.trim();
+            if (name && !db.subjects.includes(name)) {
+                db.subjects.push(name);
+                saveDB(db);
+                render();
+            }
+        }
+
+        function handleDeleteSubject(subjName) {
+            db.subjects = db.subjects.filter(s => s !== subjName);
+            saveDB(db);
+            render();
+        }
+
+        function handleSaveLesson(e, cls, subj) {
+            e.preventDefault();
+            const topic = document.getElementById('l_topic').value.trim();
+            const hw = document.getElementById('l_hw').value.trim();
+
+            db.lessons.push({
+                id: 'les_' + Date.now(),
+                studentClass: cls,
+                subject: subj,
+                topic: topic,
+                homework: hw,
+                date: new Date().toLocaleDateString('uk-UA')
+            });
+
+            saveDB(db);
+            alert('Урок збережено!');
+            document.getElementById('l_topic').value = '';
+            document.getElementById('l_hw').value = '';
+        }
+
+        function handleAddGrade(studentId, subj) {
+            const input = document.getElementById(`grade_val_${studentId}`);
+            const val = input.value.trim().toUpperCase();
+
+            if (!val) return;
+
+            db.grades.push({
+                id: 'grd_' + Date.now(),
+                studentId: studentId,
+                subject: subj,
+                val: val,
+                date: new Date().toLocaleDateString('uk-UA')
+            });
+
+            saveDB(db);
+            render();
+        }
+
+        // Первинний запуск
+        render();
+    </script>
+</body>
+</html>
